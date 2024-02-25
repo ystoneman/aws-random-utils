@@ -99,7 +99,7 @@ def get_hosted_configuration_content(application_id, config_profile_id, version_
         config_version_response = appconfig_client.get_hosted_configuration_version(
             ApplicationId=application_id,
             ConfigurationProfileId=config_profile_id,
-            VersionNumber=version_number
+            VersionNumber=int(version_number)
         )
         content = config_version_response['Content'].read()
         return content
@@ -137,7 +137,7 @@ def create_or_get_config_profile(app_id, profile_name, config_version, region='u
             appconfig_client.get_hosted_configuration_version(
                 ApplicationId=app_id,
                 ConfigurationProfileId=profile_id,
-                VersionNumber=config_version
+                VersionNumber=int(config_version)
             )
             print(f"Configuration version {config_version} exists for profile '{profile_name}'")
         except appconfig_client.exceptions.ResourceNotFoundException:
@@ -240,4 +240,3 @@ def lambda_handler(event, context):
         'statusCode': 200,
         'body': json.dumps('Deployment Process Initiated')
     }
-
