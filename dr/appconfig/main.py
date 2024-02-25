@@ -1,8 +1,6 @@
 # Work in progress. Use at your own risk and read the Readme.
 
-import boto3
-import os
-import json
+import boto3, json, os
 
 def get_application_id_by_name(app_name, region='us-east-1'):
     # Create a boto3 client for the AppConfig service
@@ -222,7 +220,7 @@ def lambda_handler(event, context):
             ConfigurationProfileId=target_config_profile_id,
             ConfigurationVersion=str(target_config_version)
         )
-        print(f"Deployment initiated in {target_region}: {json.dumps(response)}")
+        print(f"Deployment initiated in {target_region}: {str(response)}")
     except Exception as e:
         print(f"Error deploying configuration: {str(e)}")
 
