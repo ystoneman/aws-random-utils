@@ -19,6 +19,7 @@ The Lambda function triggers on specific AppConfig events in the origin region. 
 - Environment variables set for the Lambda function.
 - Set the timeout to 30 seconds, because with the default Memory, it can take just over 3 seconds long.
 - Event pattern based rule in Amazon EventBridge.
+- Applications and environments should already be created in the DR region. They must have the same names as in the origin region for the replication to work correctly.
 
 ## IAM Permissions
 
