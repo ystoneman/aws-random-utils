@@ -107,7 +107,7 @@ def get_hosted_configuration_content(application_id, config_profile_id, version_
         print(f"Error occurred while fetching hosted configuration content: {e}")
         return None
         
-def create_or_get_config_profile(app_id, profile_name, config_version, region='us-east-1', content=None):
+def create_or_get_config_profile(app_id, profile_name, region='us-east-1', content=None):
     appconfig_client = boto3.client('appconfig', region_name=region)
     print(f"Initialized AppConfig client for creating or getting config profile in region: {region}")
 
@@ -132,27 +132,17 @@ def create_or_get_config_profile(app_id, profile_name, config_version, region='u
             profile_id = response['Id']
             print(f"Created new configuration profile: {response['Name']} (ID: {profile_id})")
 
-        # Check if the specified configuration version exists
-        try:
-            appconfig_client.get_hosted_configuration_version(
-                ApplicationId=app_id,
-                ConfigurationProfileId=profile_id,
-                VersionNumber=int(config_version)
-            )
-            print(f"Configuration version {config_version} exists for profile '{profile_name}'")
-        except appconfig_client.exceptions.ResourceNotFoundException:
-            print(f"Configuration version {config_version} does not exist, creating...")
-            # Create a new configuration version
-            appconfig_client.create_hosted_configuration_version(
-                ApplicationId=app_id,
-                ConfigurationProfileId=profile_id,
-                Content=content,
-                ContentType='application/json',
-                VersionLabel=config_version
-            )
-            print(f"Created configuration version {config_version} for profile '{profile_name}'")
+        # Create a new configuration version
+        print(f"Creating new configuration version for profile '{profile_name}'")
+        version_response = appconfig_client.create_hosted_configuration_version(
+            ApplicationId=app_id,
+            ConfigurationProfileId=profile_id,
+            Content=content,
+            ContentType='application/json'
+        )
+        print(f"Created configuration version {version_response['VersionNumber']} for profile '{profile_name}'")
 
-        return profile_id
+        return [profile_id, version_response['VersionNumber']]
 
     except Exception as e:
         print(f"Error occurred in create_or_get_config_profile: {e}")
@@ -208,16 +198,16 @@ def lambda_handler(event, context):
         ConfigurationProfileId=configuration_profile_id,
         VersionNumber=int(configuration_version)  # Ensure this is an integer
     )['Content'].read()
+    print('origin_config_content: ', origin_config_content)
 
     # Get the name of the configuration profile in the origin region
     config_profile_name = get_config_profile_name_by_id(application_id, configuration_profile_id)
     print("Configuration Profile Name:", config_profile_name)
 
     # Get or create the configuration profile ID in the target region
-    target_config_profile_id = create_or_get_config_profile(
+    target_config_profile_id, target_config_version = create_or_get_config_profile(
         app_id,
         config_profile_name,
-        configuration_version,
         target_region,
         content=origin_config_content
         )
@@ -230,7 +220,7 @@ def lambda_handler(event, context):
             EnvironmentId=target_env_id,
             DeploymentStrategyId=deployment_strategy_id,
             ConfigurationProfileId=target_config_profile_id,
-            ConfigurationVersion=configuration_version
+            ConfigurationVersion=str(target_config_version)
         )
         print(f"Deployment initiated in {target_region}: {json.dumps(response)}")
     except Exception as e:
@@ -240,3 +230,4 @@ def lambda_handler(event, context):
         'statusCode': 200,
         'body': json.dumps('Deployment Process Initiated')
     }
+
