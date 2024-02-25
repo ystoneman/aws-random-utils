@@ -57,7 +57,10 @@ Configure an Event pattern-based rule in Amazon EventBridge to trigger the Lambd
 ```json
 {
   "source": ["aws.appconfig"],
-  "region": ["us-east-1"]
+  "region": ["us-east-1"],
+  "detail": {
+    "eventName": ["StartDeployment"]
+  }
 }
 ```
 
