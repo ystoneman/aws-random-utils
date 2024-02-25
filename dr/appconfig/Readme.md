@@ -68,6 +68,7 @@ Configure an Event pattern-based rule in Amazon EventBridge to trigger the Lambd
 - **Testing**: Test the function thoroughly in a non-production environment to ensure it behaves as expected.
 - **Monitoring**: Set up monitoring and alerting for the Lambda function to track its performance and catch any issues early.
 - **Consolidating**: Instantiate an origin region client once and a target region client once, and then pass those into function as parameters.
+- **Versioning**: The version numbers supported are currently only the immutable `LatestVersionNumber` (integer), rather than the more human `VersionLabel` (string -- for example, “v2.2.0”). But you can modify the code to support that.
 
 ## Conclusion
 This Lambda function serves as a sample foundational tool snippet for replicating AppConfig feature flags across regions. Remember, customization and thorough testing are key to successfully implementing this solution in a real-world environment.
