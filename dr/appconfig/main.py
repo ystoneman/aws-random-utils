@@ -125,7 +125,8 @@ def create_or_get_config_profile(app_id, profile_name, region='us-east-1', conte
             response = appconfig_client.create_configuration_profile(
                 ApplicationId=app_id,
                 Name=profile_name,
-                LocationUri='hosted'
+                LocationUri='hosted',
+                Type='AWS.AppConfig.FeatureFlags'
             )
             profile_id = response['Id']
             print(f"Created new configuration profile: {response['Name']} (ID: {profile_id})")
