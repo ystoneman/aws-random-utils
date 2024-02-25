@@ -93,13 +93,25 @@ def get_config_profile_name_by_id(application_id, config_profile_id, region='us-
         print(f"Error occurred while retrieving configuration profile name: {e}")
         return None
         
-def create_or_get_config_profile(app_id, profile_name, config_version, region='us-east-1'):
+def get_hosted_configuration_content(application_id, config_profile_id, version_number, region='us-east-1'):
+    appconfig_client = boto3.client('appconfig', region_name=region)
+    try:
+        config_version_response = appconfig_client.get_hosted_configuration_version(
+            ApplicationId=application_id,
+            ConfigurationProfileId=config_profile_id,
+            VersionNumber=version_number
+        )
+        content = config_version_response['Content'].read()
+        return content
+    except Exception as e:
+        print(f"Error occurred while fetching hosted configuration content: {e}")
+        return None
+        
+def create_or_get_config_profile(app_id, profile_name, config_version, region='us-east-1', content=None):
     appconfig_client = boto3.client('appconfig', region_name=region)
     print(f"Initialized AppConfig client for creating or getting config profile in region: {region}")
 
     try:
-        # Convert config_version to integer
-        config_version = int(config_version)
         print(f"Checking for existing configuration profiles for application ID: {app_id}")
         profiles = appconfig_client.list_configuration_profiles(ApplicationId=app_id)
         profile_id = None
@@ -130,14 +142,13 @@ def create_or_get_config_profile(app_id, profile_name, config_version, region='u
             print(f"Configuration version {config_version} exists for profile '{profile_name}'")
         except appconfig_client.exceptions.ResourceNotFoundException:
             print(f"Configuration version {config_version} does not exist, creating...")
-            # Create a new configuration version (example: content could be fetched from a file or another source)
-            content = '{"key":"value"}'  # Replace with actual configuration content
+            # Create a new configuration version
             appconfig_client.create_hosted_configuration_version(
                 ApplicationId=app_id,
                 ConfigurationProfileId=profile_id,
-                Content=content.encode('utf-8'),
+                Content=content,
                 ContentType='application/json',
-                VersionNumber=config_version
+                VersionLabel=config_version
             )
             print(f"Created configuration version {config_version} for profile '{profile_name}'")
 
@@ -184,16 +195,32 @@ def lambda_handler(event, context):
     
     target_env_id = get_env_id(app_id, env_name, target_region)
     print('Target Env ID: ', target_env_id)
+
+    # Initialize AppConfig client for the origin region
+    appconfig_origin = boto3.client('appconfig')
     
     # Initialize AppConfig client for the target region
     appconfig_client = boto3.client('appconfig', region_name=target_region)
     
+    # Get the configuration content from the origin region
+    origin_config_content = appconfig_origin.get_hosted_configuration_version(
+        ApplicationId=application_id,
+        ConfigurationProfileId=configuration_profile_id,
+        VersionNumber=int(configuration_version)  # Ensure this is an integer
+    )['Content'].read()
+
     # Get the name of the configuration profile in the origin region
     config_profile_name = get_config_profile_name_by_id(application_id, configuration_profile_id)
     print("Configuration Profile Name:", config_profile_name)
 
     # Get or create the configuration profile ID in the target region
-    target_config_profile_id = create_or_get_config_profile(app_id, config_profile_name, configuration_version, target_region)
+    target_config_profile_id = create_or_get_config_profile(
+        app_id,
+        config_profile_name,
+        configuration_version,
+        target_region,
+        content=origin_config_content
+        )
     print("Target Configuration Profile ID:", target_config_profile_id)
 
     # Deploy the configuration in the target region
