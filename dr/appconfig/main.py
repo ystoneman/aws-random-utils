@@ -93,32 +93,55 @@ def get_config_profile_name_by_id(application_id, config_profile_id, region='us-
         print(f"Error occurred while retrieving configuration profile name: {e}")
         return None
         
-def create_or_get_config_profile(app_id, profile_name, region='us-east-1'):
-    # Initialize the AppConfig client for the specified region
+def create_or_get_config_profile(app_id, profile_name, config_version, region='us-east-1'):
     appconfig_client = boto3.client('appconfig', region_name=region)
     print(f"Initialized AppConfig client for creating or getting config profile in region: {region}")
 
     try:
+        # Convert config_version to integer
+        config_version = int(config_version)
         print(f"Checking for existing configuration profiles for application ID: {app_id}")
-        # List all configuration profiles for the given application ID
         profiles = appconfig_client.list_configuration_profiles(ApplicationId=app_id)
-        print("Iterating through existing configuration profiles...")
-        
-        for profile in profiles['Items']:
-            print(f"Found profile: {profile['Name']} (ID: {profile['Id']})")
-            if profile['Name'] == profile_name:
-                print(f"Matching profile found for '{profile_name}' with ID: {profile['Id']}")
-                return profile['Id']  # Return the existing profile ID
+        profile_id = None
 
-        print(f"No matching profile found for '{profile_name}', creating a new profile...")
-        # If not found, create a new configuration profile
-        response = appconfig_client.create_configuration_profile(
-            ApplicationId=app_id,
-            Name=profile_name,
-            LocationUri='hosted'
-        )
-        print(f"Created new configuration profile: {response['Name']} (ID: {response['Id']})")
-        return response['Id']
+        for profile in profiles['Items']:
+            if profile['Name'] == profile_name:
+                profile_id = profile['Id']
+                print(f"Matching profile found for '{profile_name}' with ID: {profile_id}")
+                break
+
+        if profile_id is None:
+            print(f"No matching profile found for '{profile_name}', creating a new profile...")
+            response = appconfig_client.create_configuration_profile(
+                ApplicationId=app_id,
+                Name=profile_name,
+                LocationUri='hosted'
+            )
+            profile_id = response['Id']
+            print(f"Created new configuration profile: {response['Name']} (ID: {profile_id})")
+
+        # Check if the specified configuration version exists
+        try:
+            appconfig_client.get_hosted_configuration_version(
+                ApplicationId=app_id,
+                ConfigurationProfileId=profile_id,
+                VersionNumber=config_version
+            )
+            print(f"Configuration version {config_version} exists for profile '{profile_name}'")
+        except appconfig_client.exceptions.ResourceNotFoundException:
+            print(f"Configuration version {config_version} does not exist, creating...")
+            # Create a new configuration version (example: content could be fetched from a file or another source)
+            content = '{"key":"value"}'  # Replace with actual configuration content
+            appconfig_client.create_hosted_configuration_version(
+                ApplicationId=app_id,
+                ConfigurationProfileId=profile_id,
+                Content=content.encode('utf-8'),
+                ContentType='application/json',
+                VersionNumber=config_version
+            )
+            print(f"Created configuration version {config_version} for profile '{profile_name}'")
+
+        return profile_id
 
     except Exception as e:
         print(f"Error occurred in create_or_get_config_profile: {e}")
@@ -170,7 +193,7 @@ def lambda_handler(event, context):
     print("Configuration Profile Name:", config_profile_name)
 
     # Get or create the configuration profile ID in the target region
-    target_config_profile_id = create_or_get_config_profile(app_id, config_profile_name, target_region)
+    target_config_profile_id = create_or_get_config_profile(app_id, config_profile_name, configuration_version, target_region)
     print("Target Configuration Profile ID:", target_config_profile_id)
 
     # Deploy the configuration in the target region
