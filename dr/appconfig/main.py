@@ -1,4 +1,5 @@
-# work in progress. Use at your own risk
+# Work in progress. Use at your own risk and read the Readme.
+
 import boto3
 import os
 import json
@@ -56,22 +57,71 @@ def get_appconfig_details_by_id(application_id, environment_id, region='us-east-
 def get_env_id(app_id, env_name, region='us-east-1'):
     # Create a boto3 client for the AppConfig service
     appconfig_client = boto3.client('appconfig', region_name=region)
+    print(f"Initialized AppConfig client for region {region}")
 
     # Initialize the paginator for the list_environments operation
     paginator = appconfig_client.get_paginator('list_environments')
 
     try:
+        print(f"Listing environments for application ID: {app_id}")
         # Iterate through the pages of environments
         for page in paginator.paginate(ApplicationId=app_id):
+            print("Checking page of environments...")
             # Search each environment in the current page
             for env in page['Items']:
+                print(f"Found environment: {env['Name']} (ID: {env['Id']})")
                 if env['Name'] == env_name:
+                    print(f"Match found for environment name '{env_name}' with ID: {env['Id']}")
                     return env['Id']
+        print(f"No matching environment found for name: {env_name} in application ID: {app_id}")
         # If no matching environment is found
         return None
 
     except Exception as e:
-        print(f"Error occurred while searching for environment ID: {e}.")
+        print(f"Error occurred while searching for environment ID in {region}: {e}")
+        return None
+        
+def get_config_profile_name_by_id(application_id, config_profile_id, region='us-east-1'):
+    appconfig_client = boto3.client('appconfig', region_name=region)
+    try:
+        response = appconfig_client.get_configuration_profile(
+            ApplicationId=application_id,
+            ConfigurationProfileId=config_profile_id
+        )
+        return response['Name']
+    except Exception as e:
+        print(f"Error occurred while retrieving configuration profile name: {e}")
+        return None
+        
+def create_or_get_config_profile(app_id, profile_name, region='us-east-1'):
+    # Initialize the AppConfig client for the specified region
+    appconfig_client = boto3.client('appconfig', region_name=region)
+    print(f"Initialized AppConfig client for creating or getting config profile in region: {region}")
+
+    try:
+        print(f"Checking for existing configuration profiles for application ID: {app_id}")
+        # List all configuration profiles for the given application ID
+        profiles = appconfig_client.list_configuration_profiles(ApplicationId=app_id)
+        print("Iterating through existing configuration profiles...")
+        
+        for profile in profiles['Items']:
+            print(f"Found profile: {profile['Name']} (ID: {profile['Id']})")
+            if profile['Name'] == profile_name:
+                print(f"Matching profile found for '{profile_name}' with ID: {profile['Id']}")
+                return profile['Id']  # Return the existing profile ID
+
+        print(f"No matching profile found for '{profile_name}', creating a new profile...")
+        # If not found, create a new configuration profile
+        response = appconfig_client.create_configuration_profile(
+            ApplicationId=app_id,
+            Name=profile_name,
+            LocationUri='hosted'
+        )
+        print(f"Created new configuration profile: {response['Name']} (ID: {response['Id']})")
+        return response['Id']
+
+    except Exception as e:
+        print(f"Error occurred in create_or_get_config_profile: {e}")
         return None
 
 def lambda_handler(event, context):
@@ -114,6 +164,14 @@ def lambda_handler(event, context):
     
     # Initialize AppConfig client for the target region
     appconfig_client = boto3.client('appconfig', region_name=target_region)
+    
+    # Get the name of the configuration profile in the origin region
+    config_profile_name = get_config_profile_name_by_id(application_id, configuration_profile_id)
+    print("Configuration Profile Name:", config_profile_name)
+
+    # Get or create the configuration profile ID in the target region
+    target_config_profile_id = create_or_get_config_profile(app_id, config_profile_name, target_region)
+    print("Target Configuration Profile ID:", target_config_profile_id)
 
     # Deploy the configuration in the target region
     try:
@@ -121,8 +179,8 @@ def lambda_handler(event, context):
             ApplicationId=app_id,
             EnvironmentId=target_env_id,
             DeploymentStrategyId=deployment_strategy_id,
-            ConfigurationProfileId=config_profile_id,
-            ConfigurationVersion=config_version
+            ConfigurationProfileId=target_config_profile_id,
+            ConfigurationVersion=configuration_version
         )
         print(f"Deployment initiated in {target_region}: {json.dumps(response)}")
     except Exception as e:
