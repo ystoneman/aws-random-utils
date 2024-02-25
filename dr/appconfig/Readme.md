@@ -67,6 +67,7 @@ Configure an Event pattern-based rule in Amazon EventBridge to trigger the Lambd
 - **Rollback Scenarios**: Currently, this Lambda function covers only the start of deployments. Rollback scenario support is a planned future enhancement.
 - **Testing**: Test the function thoroughly in a non-production environment to ensure it behaves as expected.
 - **Monitoring**: Set up monitoring and alerting for the Lambda function to track its performance and catch any issues early.
+- **Consolidating**: Instantiate an origin region client once and a target region client once, and then pass those into function as parameters.
 
 ## Conclusion
 This Lambda function serves as a sample foundational tool snippet for replicating AppConfig feature flags across regions. Remember, customization and thorough testing are key to successfully implementing this solution in a real-world environment.
