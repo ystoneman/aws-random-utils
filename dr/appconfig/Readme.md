@@ -17,6 +17,7 @@ The Lambda function triggers on specific AppConfig events in the origin region. 
 - AWS Lambda function with access to AppConfig APIs in both the origin and DR regions.
 - Properly configured IAM roles and permissions.
 - Environment variables set for the Lambda function.
+- Set the timeout to 30 seconds, because with the default Memory, it can take just over 3 seconds long.
 - Event pattern based rule in Amazon EventBridge.
 
 ## IAM Permissions
