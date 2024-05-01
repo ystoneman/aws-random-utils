@@ -6,6 +6,7 @@
 from datetime import datetime, timezone
 import argparse
 import logging
+import json
 import csv
 import os
 
@@ -162,56 +163,57 @@ def create_manifest_file(csv_file, manifest_file, s3_path):
                 'ymax': int(ymax)
             })
 
-    for file_name, image_data in image_annotations.items():
-        image_count += 1
-        source_ref = str(s3_path) + file_name
+        for file_name, image_data in image_annotations.items():
+            image_count += 1
+            source_ref = str(s3_path) + file_name
+    
+            # Create JSON for image source ref.
+            json_line = {}
+            json_line['source-ref'] = source_ref
+    
+            # Create bounding-box metadata.
+            bounding_box = {}
+            bounding_box['image_size'] = [{'width': image_data['width'], 'depth': 3, 'height': image_data['height']}]
+            bounding_box['annotations'] = []
+    
+            for annotation_data in image_data['annotations']:
+                label_count += 1
+    
+                class_name = annotation_data['class_name']
+                xmin = annotation_data['xmin']
+                ymin = annotation_data['ymin']
+                xmax = annotation_data['xmax']
+                ymax = annotation_data['ymax']
+    
+                # Create annotation for the object.
+                annotation = {}
+                annotation['class_id'] = 0  # Set class_id to 0 for single class.
+                annotation['left'] = xmin
+                annotation['top'] = ymin
+                annotation['width'] = xmax - xmin
+                annotation['height'] = ymax - ymin
+                bounding_box['annotations'].append(annotation)
+    
+                # Create the JSON line metadata.
+                metadata = {}
+                metadata['confidence'] = 1
+                metadata['job-name'] = f'labeling-job/{class_name}'
+                metadata['class-map'] = {0: class_name}
+                metadata['human-annotated'] = "yes"
+                metadata['creation-date'] = \
+                    datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')
+                metadata['type'] = "groundtruth/object-detection"
+                metadata['objects'] = [{'confidence': 1}]
+    
+                json_line[f'{class_name}-metadata'] = metadata
+                json_line['bounding-box'] = bounding_box
+    
+            # Write the image JSON Line.
+            output_file.write(json.dumps(json_line))
+            output_file.write('\n')
 
-        # Create JSON for image source ref.
-        json_line = {}
-        json_line['source-ref'] = source_ref
+        output_file.close()
 
-        # Create bounding-box metadata.
-        bounding_box = {}
-        bounding_box['image_size'] = [{'width': image_data['width'], 'depth': 3, 'height': image_data['height']}]
-        bounding_box['annotations'] = []
-
-        for annotation_data in image_data['annotations']:
-            label_count += 1
-
-            class_name = annotation_data['class_name']
-            xmin = annotation_data['xmin']
-            ymin = annotation_data['ymin']
-            xmax = annotation_data['xmax']
-            ymax = annotation_data['ymax']
-
-            # Create annotation for the object.
-            annotation = {}
-            annotation['class_id'] = 0  # Set class_id to 0 for single class.
-            annotation['left'] = xmin
-            annotation['top'] = ymin
-            annotation['width'] = xmax - xmin
-            annotation['height'] = ymax - ymin
-            bounding_box['annotations'].append(annotation)
-
-            # Create the JSON line metadata.
-            metadata = {}
-            metadata['confidence'] = 1
-            metadata['job-name'] = f'labeling-job/{class_name}'
-            metadata['class-map'] = {0: class_name}
-            metadata['human-annotated'] = "yes"
-            metadata['creation-date'] = \
-                datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')
-            metadata['type'] = "groundtruth/object-detection"
-            metadata['objects'] = [{'confidence': 1}]
-
-            json_line[f'{class_name}-metadata'] = metadata
-            json_line['bounding-box'] = bounding_box
-
-        # Write the image JSON Line.
-        output_file.write(json.dumps(json_line))
-        output_file.write('\n')
-
-    output_file.close()
     logging.info("Finished creating manifest file %s\nImages: %s\nLabels: %s",
                 manifest_file, image_count, label_count)
 
