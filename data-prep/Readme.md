@@ -25,3 +25,4 @@ python rekognition-manifest-file.py --csv_file my_labels.csv --s3_path s3://my-b
 ```
 3. If the script detects duplicate image entries, it will instruct you to review and update the deduplicated file, then re-run the script.
 4. Upload the generated `my_labels.manifest` file to S3 and use it to create your Rekognition Custom Labels dataset.
+5. When creating your Rekognition Custom Labels dataset, choose the option to "Import images labeled by SageMaker Ground Truth" and enter the S3 path where you stored the manifest file.
