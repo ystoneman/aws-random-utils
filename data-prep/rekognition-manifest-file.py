@@ -9,6 +9,7 @@ import logging
 import json
 import csv
 import os
+import re
 
 """
 Purpose
@@ -204,7 +205,11 @@ def create_manifest_file(csv_file, manifest_file, s3_path):
                     datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')
                 metadata['type'] = "groundtruth/object-detection"
                 metadata['objects'] = [{'confidence': 1}]
-    
+
+                # replace any characters that are not 
+                # alphanumeric or underscore with hyphens.
+                class_name = re.sub(r'[^a-zA-Z0-9_]', '-', class_name)
+
                 json_line[f'{class_name}-metadata'] = metadata
                 json_line['bounding-box'] = bounding_box
     
