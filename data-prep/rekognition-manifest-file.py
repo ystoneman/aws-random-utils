@@ -11,6 +11,7 @@ import csv
 import os
 import re
 
+
 """
 Purpose
 Amazon Rekognition Custom Labels model example used in the service documentation.
@@ -70,20 +71,20 @@ def split_row(row):
     return file_name, width, height, class_name, xmin, ymin, xmax, ymax
 
     # Before (input):
-    # filename,width,height,class,xmin,ymin,xmax,ymax
-    # show_picture_asp?id=aaaaaaaaaaogcqq&w2=420&h2=378&clip=center,420,378&meta=0_jpg.rf.60ca1bb806ed39f9a829b5c1788dbe4c.jpg,100,100,Corn Gray leaf spot,1,1,99,88
-    
-    # After (output):
-    # filename,width,height,class,xmin,ymin,xmax,ymax
-    # show_picture_asp?id=aaaaaaaaaaogcqq&w2=420&h2=378&clip=center,420,378&meta=0_jpg.rf.60ca1bb806ed39f9a829b5c1788dbe4c.jpg|100|100|Corn Gray leaf spot|1|1|99|88
+        # filename,width,height,class,xmin,ymin,xmax,ymax
+        # show_picture_asp?id=aaaaaaaaaaogcqq&w2=420&h2=378&clip=center,420,378&meta=0_jpg.rf.60ca1bb806ed39f9a829b5c1788dbe4c.jpg,100,100,Corn Gray leaf spot,1,1,99,88
 
-def create_json_line(file_name, width, height, rest, s3_path):
+    # After (output):
+        # filename,width,height,class,xmin,ymin,xmax,ymax
+        # show_picture_asp?id=aaaaaaaaaaogcqq&w2=420&h2=378&clip=center,420,378&meta=0_jpg.rf.60ca1bb806ed39f9a829b5c1788dbe4c.jpg|100|100|Corn Gray leaf spot|1|1|99|88
+def create_json_line(file_name, width, height, annotations, class_name, s3_path):
     """
     Creates a JSON line for an image annotation.
     :param file_name: The name of the image file.
     :param width: The width of the image.
     :param height: The height of the image.
-    :param rest: The remaining annotation data.
+    :param annotations: The list of annotations for the image.
+    :param class_name: The class name for the annotations.
     :param s3_path: The S3 path to the folder that contains the images.
     :return: The JSON line string.
     """
@@ -92,32 +93,21 @@ def create_json_line(file_name, width, height, rest, s3_path):
     # Create JSON for image source ref.
     json_line = {'source-ref': source_ref}
 
-    # Create bounding-box metadata.
-    bounding_box = {}
-    bounding_box['annotations'] = [
-        {
-            'class_id': 0,  # Set class_id to 0 for single class.
-            'left': int(rest[i]),
-            'top': int(rest[i + 1]),
-            'width': int(rest[i + 2]) - int(rest[i]),
-            'height': int(rest[i + 3]) - int(rest[i + 1])
-        }
-        for i in range(0, len(rest), 5)
-    ]
-    bounding_box['image_size'] = [{'width': int(width), 'depth': 3, 'height': int(height)}]
+    bounding_box = {
+        'annotations': annotations,
+        'image_size': [{'width': int(width), 'depth': 3, 'height': int(height)}]
+    }
 
-    # Create the JSON line metadata.
-    metadata = {}
-    metadata['confidence'] = 1
-    metadata['job-name'] = 'labeling-job/' + rest[4]
-    metadata['class-map'] = {0: rest[4]}
-    metadata['human-annotated'] = "yes"
-    metadata['creation-date'] = \
-        datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')
-    metadata['type'] = "groundtruth/object-detection"
-    metadata['objects'] = [{'confidence': 1}]
+    metadata = {
+        'job-name': 'labeling-job/' + class_name,
+        'class-map': {0: class_name},
+        'human-annotated': "yes",
+        'creation-date': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f'),
+        'type': "groundtruth/object-detection",
+        'objects': [{'confidence': 1} for _ in annotations]
+    }
 
-    json_line[f'{rest[4]}-metadata'] = metadata
+    json_line['bounding-box-metadata'] = metadata
     json_line['bounding-box'] = bounding_box
 
     return json.dumps(json_line)
@@ -153,74 +143,31 @@ def create_manifest_file(csv_file, manifest_file, s3_path):
                 image_annotations[file_name] = {
                     'width': int(width),
                     'height': int(height),
+                    'class_name': class_name,
                     'annotations': []
                 }
 
             image_annotations[file_name]['annotations'].append({
-                'class_name': class_name,
-                'xmin': int(xmin),
-                'ymin': int(ymin),
-                'xmax': int(xmax),
-                'ymax': int(ymax)
+                'class_id': 0,  # Single class
+                'left': int(xmin),
+                'top': int(ymin),
+                'width': int(xmax) - int(xmin),
+                'height': int(ymax) - int(ymin)
             })
 
         for file_name, image_data in image_annotations.items():
+            json_line = create_json_line(file_name,
+                                         image_data['width'],
+                                         image_data['height'],
+                                         image_data['annotations'],
+                                         image_data['class_name'],
+                                         s3_path)
+            output_file.write(json_line + '\n')
             image_count += 1
-            source_ref = str(s3_path) + file_name
-    
-            # Create JSON for image source ref.
-            json_line = {}
-            json_line['source-ref'] = source_ref
-    
-            # Create bounding-box metadata.
-            bounding_box = {}
-            bounding_box['image_size'] = [{'width': image_data['width'], 'depth': 3, 'height': image_data['height']}]
-            bounding_box['annotations'] = []
-    
-            for annotation_data in image_data['annotations']:
-                label_count += 1
-    
-                class_name = annotation_data['class_name']
-                xmin = annotation_data['xmin']
-                ymin = annotation_data['ymin']
-                xmax = annotation_data['xmax']
-                ymax = annotation_data['ymax']
-    
-                # Create annotation for the object.
-                annotation = {}
-                annotation['class_id'] = 0  # Set class_id to 0 for single class.
-                annotation['left'] = xmin
-                annotation['top'] = ymin
-                annotation['width'] = xmax - xmin
-                annotation['height'] = ymax - ymin
-                bounding_box['annotations'].append(annotation)
-    
-                # Create the JSON line metadata.
-                metadata = {}
-                metadata['confidence'] = 1
-                metadata['job-name'] = f'labeling-job/{class_name}'
-                metadata['class-map'] = {0: class_name}
-                metadata['human-annotated'] = "yes"
-                metadata['creation-date'] = \
-                    datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')
-                metadata['type'] = "groundtruth/object-detection"
-                metadata['objects'] = [{'confidence': 1}]
-
-                # replace any characters that are not 
-                # alphanumeric or underscore with hyphens.
-                class_name = re.sub(r'[^a-zA-Z0-9_]', '-', class_name)
-
-                json_line[f'{class_name}-metadata'] = metadata
-                json_line['bounding-box'] = bounding_box
-    
-            # Write the image JSON Line.
-            output_file.write(json.dumps(json_line))
-            output_file.write('\n')
-
-        output_file.close()
+            label_count += len(image_data['annotations'])
 
     logging.info("Finished creating manifest file %s\nImages: %s\nLabels: %s",
-                manifest_file, image_count, label_count)
+                  manifest_file, image_count, label_count)
 
     return image_count, label_count
 
@@ -238,7 +185,6 @@ def add_arguments(parser):
         "--s3_path", help="The S3 bucket and folder path for the images."
         " If not supplied, column 1 is assumed to include the S3 path.", required=False
     )
-
 
 def main():
 
@@ -267,7 +213,7 @@ def main():
         if check_duplicates(csv_file, deduplicated_file, duplicates_file):
             print(f"Duplicate rows found. Use {duplicates_file} to view duplicates "
                   f"and then update {deduplicated_file}. ")
-            print(f"{deduplicated_file} contains the first occurence of a duplicate row. "
+            print(f"{deduplicated_file} contains the first occurrence of a duplicate row. "
                   "Update as necessary with the correct label information.")
             print(f"Re-run the script with {deduplicated_file}")
         else:
@@ -283,7 +229,6 @@ def main():
     except FileNotFoundError as err:
         logging.exception("File not found: %s", err)
         print(f"File not found: {err}. Check your input CSV file.")
-
 
 if __name__ == "__main__":
     main()
