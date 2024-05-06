@@ -1,5 +1,4 @@
 # Adapted from AWS documentation
-# Work in progress.
 
 # Before running this, I used regex in VS Code to remove lines that were empty by replacing \n\n with \n
 
